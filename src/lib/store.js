@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
 import { emergencyTrim } from './storage-trim.js'; // runs first: trims oversized caches before stores load
+import { isSecureStore, initialSecureValue, saveSecureValue } from './secure-storage.js';
 
-// Tiny persistent reactive store backed by localStorage.
+// Persistent reactive store: sensitive Android stores go to Keystore-backed native storage;
+// browser installs and non-sensitive Android stores continue using localStorage.
 // Pending saves are written at once when the app is backgrounded or closed,
 // so nothing (reading position, a book just opened) is lost if Android kills it.
 const pending = new Map();
@@ -13,10 +15,15 @@ if (typeof window !== 'undefined') {
 
 export function persisted(key, initial, { delay = 150 } = {}) {
   let value = initial;
+  const secure = isSecureStore(key);
+  // Secure stores are loaded only after bootstrap has unlocked the native vault.
+  // Do not fall back to WebView storage if the encrypted store cannot be read.
   try {
-    const raw = localStorage.getItem('inkwell:' + key);
+    const raw = secure ? initialSecureValue(key) : localStorage.getItem('inkwell:' + key);
     if (raw) value = mergeDefaults(initial, JSON.parse(raw));
-  } catch {}
+  } catch (err) {
+    if (secure) throw err; // Never silently reset encrypted credentials.
+  }
   const subs = new Set();
   let saveTimer;
   const store = {
@@ -29,14 +36,20 @@ export function persisted(key, initial, { delay = 150 } = {}) {
         clearTimeout(saveTimer);
         pending.delete(key);
         const text = JSON.stringify(value);
-        try {
-          localStorage.setItem('inkwell:' + key, text);
-        } catch {
-          // Storage full: make room in the caches and try once more (progress and settings must save).
-          emergencyTrim();
+        if (secure) {
+          // An asynchronous native write is verified before it resolves. The
+          // secure-storage module reports failures instead of falling back.
+          saveSecureValue(key, text);
+        } else {
           try {
             localStorage.setItem('inkwell:' + key, text);
-          } catch {}
+          } catch {
+            // Storage full: make room in the caches and try once more (progress and settings must save).
+            emergencyTrim();
+            try {
+              localStorage.setItem('inkwell:' + key, text);
+            } catch {}
+          }
         }
       };
       pending.set(key, write);

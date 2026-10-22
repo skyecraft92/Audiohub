@@ -66,7 +66,7 @@ export function AccountCard() {
         <label class="set-row">
           <div>
             <b>Sync service keys</b>
-            <small>TorBox, Real-Debrid, Audiobookshelf, Hardcover & voice keys — so a new device is ready instantly</small>
+            <small>Optional: copy TorBox, Real-Debrid, Audiobookshelf, Hardcover and voice credentials to your Supabase project. Off by default on new installs; turn on only if you trust your sync server.</small>
           </div>
           <input type="checkbox" class="switch" checked={a.syncKeys} onChange={(e) => sync.account.patch({ syncKeys: e.currentTarget.checked })} />
         </label>
@@ -91,7 +91,7 @@ export function AccountCard() {
         })}
       >
         <p class="muted">
-          Accounts sync your library, progress, addons and logins across devices. They run on your own free <b>Supabase</b> project (takes ~3 minutes):
+          Accounts sync your library, progress and addons across devices. Service credentials are optional and are not synced by default on new installations. Sync runs on your own free <b>Supabase</b> project (takes ~3 minutes):
         </p>
         <ol class="steps">
           <li>
@@ -112,7 +112,7 @@ export function AccountCard() {
           </li>
         </ol>
         <p class="muted small">
-          Phone tip: if Run says “syntax error”, the editor added extra brackets while pasting. The SQL ends with the line starting <code>grant execute</code> — delete anything after it, or switch the browser to <b>Desktop site</b>.
+          If upgrading from an earlier install, re-run the setup SQL to remove the old email-confirmation function. The SQL ends with <code>drop function if exists public.audiohub_confirm(text);</code>. Keep Supabase email confirmation enabled and configure working email delivery.
         </p>
         <pre class="sql">{sync.SETUP_SQL}</pre>
         <input placeholder="https://xxxx.supabase.co" value={url} onInput={(e) => setUrl(e.currentTarget.value)} autocapitalize="off" autocorrect="off" spellcheck={false} inputmode="url" />
@@ -126,7 +126,7 @@ export function AccountCard() {
 
   return (
     <form class="set-form" onSubmit={run('in', () => sync.continueWith(email, pass))}>
-      <p class="muted">Enter an email and a password to sign in — or to create your account, if this is the first time. It backs up your library, progress, addons and logins, and puts them on your other devices.</p>
+      <p class="muted">Enter an email and password to sign in or register. New accounts must verify their email before signing in. Your library, progress and addons sync across devices; service credentials only sync if you explicitly enable that option.</p>
       {a.status && <p class="err small">{a.status}</p>}
       <input type="email" placeholder="Email" value={email} onInput={(e) => setEmail(e.currentTarget.value)} autocapitalize="off" autocomplete="email" />
       <input type="password" placeholder="Password (6+ characters)" value={pass} onInput={(e) => setPass(e.currentTarget.value)} autocomplete="current-password" />

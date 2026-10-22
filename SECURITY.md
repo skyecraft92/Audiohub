@@ -35,7 +35,10 @@ For new projects, the **Copy SQL** button includes the removal statement. Re-run
 
 ## Current limitations
 
-- Passwords, provider API keys and sync tokens are currently persisted through WebView/browser local storage in the application; Android Keystore-backed credential storage is not yet implemented.
+- **Android fork:** account, Audiobookshelf, TorBox/Real-Debrid, Hardcover, qBittorrent and AI credential-bearing store snapshots are now encrypted with a non-exportable Android Keystore key (AES-256-GCM). The ciphertext lives in Android's non-backed-up app directory. On first startup, old plaintext WebView entries are migrated, verified, and removed. If the Keystore fails, Android startup stops rather than silently discarding or re-creating the credentials.
+- **Web/PWA:** credentials still live in browser localStorage; this is **not** equivalent to Android Keystore and requires separate hardening.
+- Upgrades require keeping the same Android package and signing key. Uninstalling, clearing app data or replacing the device deletes the Keystore key and encrypted secrets. Move/export credentials separately before switching phones.
+- Any legacy plaintext SQLite pages or browser backups that existed *before migration* may persist in old backups or database free pages. App-side deletion does not retroactively erase all copies.
 - Provider credentials can be synced in plaintext within the authenticated user record when the opt-in setting is enabled. Supabase RLS is an access-control boundary, not end-to-end encryption.
 - The web relay, installed addons, in-app updater and Android cleartext/backup settings need separate threat modelling and testing.
 - No penetration test, external deployment audit, or reproducible APK verification is claimed by this patch.

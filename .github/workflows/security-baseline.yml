@@ -2,7 +2,7 @@ name: Security baseline
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, security/verification-and-sync-defaults]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +20,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Security regression checks
-        run: node --test tests/security-baseline.test.mjs
+        run: node --test tests/*.test.mjs
       - name: Compile web app
         run: npm run build
+
+  android-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;35.0.0'
+      - name: Fetch native voice-engine AAR for Android compile
+        working-directory: android/app
+        run: |
+          mkdir -p libs
+          for v in 1.13.8 1.13.7 1.13.6 1.13.5 1.13.4 1.13.3 1.13.2 1.13.1 1.13.0 1.12.15 1.12.14 1.12.13; do
+            for url in \
+              "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$v/sherpa-onnx-$v.aar" \
+              "https://huggingface.co/csukuangfj2/sherpa-onnx-libs/resolve/main/android/aar/sherpa-onnx-$v.aar"; do
+              if curl -fsSL --retry 3 -o libs/sherpa-onnx.aar "$url"; then exit 0; fi
+            done
+          done
+          echo "::error::Unable to fetch required voice-engine AAR"; exit 1
+      - name: Install and sync web code
+        run: |
+          npm ci
+          npm run build
+          npx cap sync android
+      - name: Compile Android debug APK (no release or signing changes)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon

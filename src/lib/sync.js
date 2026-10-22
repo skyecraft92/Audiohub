@@ -29,7 +29,7 @@ export const account = persisted('account', {
   refreshToken: '',
   expiresAt: 0,
   lastSync: 0,
-  syncKeys: true, // also sync TorBox / Real-Debrid / ABS / Hardcover credentials
+  syncKeys: false, // opt-in only: service credentials are sensitive
   status: '',
 });
 
@@ -137,19 +137,6 @@ export function configure(url, anonKey) {
   account.patch({ url: cleanUrl(url).replace(/^(https?:\/\/[^/]+).*$/i, '$1'), anonKey: anonKey.trim() });
 }
 
-// Supabase's free confirmation emails often never arrive. The setup SQL adds
-// audiohub_confirm(), so the app confirms the account itself: no email, no dashboard switch.
-const OLD_SQL = 'Copy the setup SQL again (Change sync server → Copy SQL) and run it in Supabase once more — it now confirms accounts without the email. Then tap Continue.';
-
-async function confirmEmail(email) {
-  try {
-    await api('/rest/v1/rpc/audiohub_confirm', { method: 'POST', body: { p_email: email } });
-    return true;
-  } catch {
-    return false; // set up with the older SQL
-  }
-}
-
 async function passwordLogin(email, password) {
   const r = await api('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password } });
   account.patch({ status: '' });
@@ -157,7 +144,7 @@ async function passwordLogin(email, password) {
   await syncNow({ first: true });
 }
 
-/** One button: sign in, or create the account if there isn't one — no confirmation email needed. */
+/** Sign in or register. Supabase must verify email ownership before password sign-in. */
 export async function continueWith(email, password) {
   try {
     return await signInOrCreate(email.trim(), password);
@@ -174,9 +161,7 @@ async function signInOrCreate(email, password) {
     return 'Signed in — your data is synced';
   } catch (e) {
     if (/not confirmed/i.test(e.message)) {
-      if (!(await confirmEmail(email))) throw new Error(OLD_SQL);
-      await passwordLogin(email, password);
-      return 'Signed in — your data is synced';
+      throw new Error('Email not confirmed. Check your inbox for the Supabase verification link, then sign in.');
     }
     if (!/invalid login|invalid credentials/i.test(e.message)) throw e;
   }
@@ -187,7 +172,7 @@ async function signInOrCreate(email, password) {
   } catch (e) {
     if (/already registered|already exists/i.test(e.message)) throw new Error('Wrong password for this email. Tap “Forgot password?” if you need a new one.');
     if (/email|rate limit|smtp|sending/i.test(e.message))
-      throw new Error('Supabase couldn’t send its confirmation email (' + e.message + '). In Supabase: Authentication → Sign In / Providers → Email → switch off “Confirm email”, save, then tap Continue again.');
+      throw new Error('Supabase could not send the verification email (' + e.message + '). Check your Supabase email provider and SMTP settings.');
     throw e;
   }
   if (r?.access_token) {
@@ -196,16 +181,8 @@ async function signInOrCreate(email, password) {
     await syncNow({ first: true });
     return 'Account created — you are signed in';
   }
-  // Created but waiting for the email: confirm it here instead.
-  if (!(await confirmEmail(email))) throw new Error(OLD_SQL);
-  try {
-    await passwordLogin(email, password);
-  } catch (e) {
-    // The email already had an account (Supabase doesn't say so when confirmation is on).
-    if (/invalid login|invalid credentials/i.test(e.message)) throw new Error('Wrong password for this email. Tap “Forgot password?” if you need a new one.');
-    throw e;
-  }
-  return 'Account created — you are signed in';
+  // Without an access token, Supabase requires email confirmation. Never bypass it.
+  return 'Check your email for the verification link, then sign in.';
 }
 
 export const signUp = continueWith;
@@ -366,9 +343,5 @@ alter table public.user_data enable row level security;
 drop policy if exists "own data" on public.user_data;
 create policy "own data" on public.user_data
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create or replace function public.audiohub_confirm(p_email text) returns void
-  language sql security definer set search_path = auth, public as $$
-  update auth.users set email_confirmed_at = now()
-  where lower(email) = lower(p_email) and email_confirmed_at is null;
-$$;
-grant execute on function public.audiohub_confirm(text) to anon;`;
+-- Remove the legacy unauthenticated email-confirmation bypass on upgrades.
+drop function if exists public.audiohub_confirm(text);`;

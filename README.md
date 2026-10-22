@@ -87,6 +87,8 @@ VITE_SUPABASE_ANON_KEY=<anon key>
 
 Leave them empty to use Audiohub without sync.
 
+**Security:** Supabase email confirmation must be enabled with functioning email delivery. New registrations must follow the verification link before signing in. Service credentials are **not synced by default on new installations**; existing installations may retain their previous setting. If you previously used an Audiohub sync project, re-run the updated in-app setup SQL to drop the legacy anonymous `audiohub_confirm` function. See [SECURITY.md](SECURITY.md) for migration steps.
+
 ### Optional: web relay (for the web version)
 
 Browsers block some services (Audible listings, Goodreads, Hardcover…). The web version sends those through a tiny relay you host yourself — the same code (`relay/index.ts`) runs as a **Cloudflare Worker** (recommended; works in Safari/iPhone) or a **Supabase Edge Function**. Steps are in the app under *Settings → Web app*. The Android app doesn't need it.

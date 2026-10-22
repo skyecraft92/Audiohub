@@ -282,7 +282,11 @@ Search and subscribe in the Podcasts tab, get new episodes, import/export OPML, 
 Keeps your library, progress, bookmarks, verdicts, settings and (optionally) service keys the same on all your devices, through **your own** free Supabase project. Without it, everything stays on the device.
 
 **How do I set it up?**
-Create a free Supabase project, then either build the app with its URL and anon key in `.env.production` (see [section 17](#17-building-your-own-copy)) or enter them in Settings → Account & sync. Sign in with email/password or Google.
+Create a free Supabase project, then either build the app with its URL and anon key in `.env.production` (see [section 17](#17-building-your-own-copy)) or enter them in Settings → Account & sync. With email/password, verify your address using the email link before signing in; keep Supabase email confirmation enabled and configure a working mail provider. Google OAuth may also be used if enabled.
+
+**Upgrading an existing sync project?** Re-run the latest in-app setup SQL to drop the legacy `audiohub_confirm` RPC that previously allowed unauthenticated email confirmation. The app update alone cannot remove a function from your Supabase database. Details are in [SECURITY.md](SECURITY.md).
+
+**Are API keys synced?** Not by default for new installations. The **Sync service keys** setting explicitly opts in. Existing installations retain their saved preference, so review it after upgrading. If you turn it off, sync again to remove those sections from the current remote data; previously stored copies may remain in backups.
 
 **"Sync failed: JWT expired".**
 Your sign-in session expired. The app refreshes it automatically and retries; if it keeps failing, sign out and in again in Settings → Account & sync.
@@ -334,7 +338,7 @@ Sending to qBittorrent, the in-app tracker browser, offline downloads, read-alou
 ## 16. Privacy
 
 - Audiohub has **no server of its own** and no analytics. It talks directly to the services you connect (and your own relay/sync if you set them up).
-- Keys and passwords are stored on the device; with sync, in your own Supabase project.
+- Keys and passwords are stored on the device. On new installations, syncing service credentials to your own Supabase project is opt-in. Existing installations retain their earlier preference. Secrets are currently held in local browser storage, not Android Keystore; do not treat that storage as hardware-backed encryption.
 - AI requests go to the AI provider whose key you added.
 - The relay forwards only to an allow-list of services and stores nothing.
 

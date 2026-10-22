@@ -84,8 +84,12 @@ public class InkwellSecureStorePlugin extends Plugin {
 
     private String read(String key) throws Exception {
         AtomicFile file = file(key);
-        if (!file.exists()) return null;
-        return decrypt(new String(file.readFully(), StandardCharsets.UTF_8));
+        try {
+            // openRead/readFully also restores an interrupted atomic backup.
+            return decrypt(new String(file.readFully(), StandardCharsets.UTF_8));
+        } catch (java.io.FileNotFoundException notSaved) {
+            return null;
+        }
     }
 
     @PluginMethod

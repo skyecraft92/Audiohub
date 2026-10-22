@@ -1,6 +1,7 @@
 // Android-only encrypted storage. Must initialise BEFORE the app's stores import.
 // The browser/PWA retains its existing localStorage persistence, with no Keystore claim.
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { migrateSecureEntries } from './secure-migration.js';
 
 const KEYS = new Set(['account', 'abs', 'debrid', 'hardcover', 'qbit', 'ai']);
 const android = Capacitor.isNativePlatform();
@@ -20,24 +21,13 @@ export async function initialiseSecureStorage() {
     throw new Error('The Android encrypted storage plugin is missing from this build');
   }
   const { items = {} } = await Native.getAll();
-  for (const key of KEYS) {
-    const oldKey = 'inkwell:' + key;
-    const legacy = localStorage.getItem(oldKey);
-    const encrypted = Object.prototype.hasOwnProperty.call(items, key) ? items[key] : undefined;
-
-    if (encrypted !== undefined) {
-      // If a previous upgrade was interrupted, encrypted data takes precedence.
-      JSON.parse(encrypted);
-      snapshot.set(key, encrypted);
-    } else if (legacy !== null) {
-      // Do not remove a plaintext copy until native encryption has succeeded.
-      JSON.parse(legacy);
-      await Native.put({ key, value: legacy });
-      snapshot.set(key, legacy);
-    }
-    // Also remove a stale legacy copy if secure data was already present.
-    if (legacy !== null) localStorage.removeItem(oldKey);
-  }
+  const migrated = await migrateSecureEntries({
+    keys: KEYS,
+    items,
+    storage: localStorage,
+    write: (key, value) => Native.put({ key, value }),
+  });
+  for (const [key, value] of migrated) snapshot.set(key, value);
   ready = true;
 }
 

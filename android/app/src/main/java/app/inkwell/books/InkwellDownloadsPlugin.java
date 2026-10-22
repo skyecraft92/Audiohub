@@ -93,6 +93,7 @@ public class InkwellDownloadsPlugin extends Plugin {
                 if (cancelled.contains(job)) throw new InterruptedException("cancelled");
                 // Connect, following redirects across hosts (debrid CDNs do this).
                 String current = url;
+                boolean responseReady = false;
                 for (int i = 0; i < 8; i++) {
                     conn = (HttpURLConnection) new URL(current).openConnection();
                     conn.setInstanceFollowRedirects(false);
@@ -114,8 +115,10 @@ public class InkwellDownloadsPlugin extends Plugin {
                         continue;
                     }
                     if (code != 200) throw new Exception("Download failed (HTTP " + code + ")");
+                    responseReady = true;
                     break;
                 }
+                if (!responseReady) throw new Exception("Too many download redirects");
                 long total = conn.getContentLengthLong();
 
                 OutputStream out;
@@ -161,6 +164,10 @@ public class InkwellDownloadsPlugin extends Plugin {
                             notifyListeners("progress", p);
                         }
                     }
+                }
+                // A clean EOF is not proof of completion if the server promised more bytes.
+                if (total >= 0 && got != total) {
+                    throw new Exception("Download interrupted (" + got + "/" + total + " bytes)");
                 }
                 if (usePublic) {
                     ContentValues done = new ContentValues();

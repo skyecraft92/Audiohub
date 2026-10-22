@@ -85,6 +85,7 @@ export async function downloadBook(details) {
       if (!url) throw new Error(`No link for part ${i + 1}`);
       if (/^file:|^content:/.test(url)) {
         saved.push({ title: t.title, uri: url, duration: t.duration, offset: t.offset });
+        patch(uid, { done: i + 1, tracks: saved.slice() });
         continue;
       }
       const ext = ((EXT.exec(url) || [])[1] || (EXT.exec(t.title || '') || [])[1] || 'mp3').toLowerCase();

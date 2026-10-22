@@ -338,7 +338,7 @@ Sending to qBittorrent, the in-app tracker browser, offline downloads, read-alou
 ## 16. Privacy
 
 - Audiohub has **no server of its own** and no analytics. It talks directly to the services you connect (and your own relay/sync if you set them up).
-- Keys and passwords are stored on the device. On new installations, syncing service credentials to your own Supabase project is opt-in. Existing installations retain their earlier preference. Secrets are currently held in local browser storage, not Android Keystore; do not treat that storage as hardware-backed encryption.
+- On **Android**, supported credential-bearing stores are encrypted at rest with an Android Keystore-backed AES key and migrate out of WebView localStorage on first launch. The **web/PWA** still uses localStorage. On new installations, syncing service credentials to your own Supabase project is opt-in; existing installations retain their earlier preference. Encrypted on-device storage does not encrypt remote Supabase backups end-to-end.
 - AI requests go to the AI provider whose key you added.
 - The relay forwards only to an allow-list of services and stores nothing.
 

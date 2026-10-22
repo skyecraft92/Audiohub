@@ -84,7 +84,7 @@ public class InkwellSecureStorePlugin extends Plugin {
 
     private String read(String key) throws Exception {
         AtomicFile file = file(key);
-        if (!file.getBaseFile().exists()) return null;
+        if (!file.exists()) return null;
         return decrypt(new String(file.readFully(), StandardCharsets.UTF_8));
     }
 

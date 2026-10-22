@@ -15,6 +15,35 @@ const MIME = { mp3: 'audio/mpeg', m4b: 'audio/mp4', m4a: 'audio/mp4', aac: 'audi
 
 const patch = (uid, part) => downloads.set((all) => ({ ...all, [uid]: { ...(all[uid] || {}), ...part } }));
 
+// Native downloads are not automatically resumed after Android kills the WebView.
+// Keep finished files, and offer a retry rather than showing a stuck cancel button.
+for (const [uid, d] of Object.entries(downloads.get())) {
+  if (d?.status === 'downloading')
+    patch(uid, { status: 'error', error: 'Interrupted — tap Retry download to continue.' });
+}
+
+const expiredLink = (error) => /HTTP (?:401|403|404|410)\b/i.test(error?.message || '');
+
+async function savedPrefix(previous, tracks, folder, target) {
+  if (previous?.folder !== folder || previous?.target !== target) {
+    // Do not leave untracked files behind when destination or layout changes.
+    for (const old of previous?.tracks || []) await Native.remove({ uri: old.uri }).catch(() => {});
+    return [];
+  }
+  const saved = previous?.tracks || [];
+  const verified = [];
+  for (let i = 0; i < saved.length && i < tracks.length; i++) {
+    const old = saved[i];
+    if (old.title !== tracks[i].title || !(await Native.exists({ uri: old.uri }).then((x) => x.exists).catch(() => false))) break;
+    verified.push(old);
+  }
+  // Discard stale or mismatched tracked files to avoid leaving invisible duplicates.
+  for (const old of saved.slice(verified.length)) {
+    await Native.remove({ uri: old.uri }).catch(() => {});
+  }
+  return verified;
+}
+
 export const isDownloaded = (uid) => downloads.get()[uid]?.status === 'done';
 
 /** Swap streaming URLs for the local files of a downloaded book. */
@@ -40,8 +69,9 @@ export async function downloadBook(details) {
   running.add(uid);
   const job = `${uid}:${Date.now()}`;
   const target = settings.get().downloadTarget || 'public';
-  const folder = `Audiohub/${safe(details.author ? `${details.title} - ${details.author.split(',')[0]}` : details.title)}`;
-  patch(uid, { book: summarize(details), status: 'downloading', done: 0, total: 0, bytes: 0, error: '', job, tracks: [] });
+  const folder = `Audiohub/${safe(details.author?.split(',')[0] || 'Unknown author')}/${safe(details.title)}`;
+  const previous = downloads.get()[uid];
+  patch(uid, { book: summarize(details), status: 'downloading', error: '', job, folder, target });
   const sub = Native.addListener('progress', (e) => {
     if (e.job === job) patch(uid, { current: e.received, currentTotal: e.total });
   });
@@ -49,21 +79,31 @@ export async function downloadBook(details) {
     let tracks = details.tracks;
     if (!tracks?.length && details.resolveTracks) tracks = (await details.resolveTracks()).tracks;
     if (!tracks?.length) throw new Error('Nothing to download for this title');
-    patch(uid, { total: tracks.length });
-    const saved = [];
-    let bytes = 0;
-    for (let i = 0; i < tracks.length; i++) {
+    const saved = await savedPrefix(previous, tracks, folder, target);
+    let bytes = saved.reduce((sum, track) => sum + (track.size || 0), 0);
+    patch(uid, { total: tracks.length, tracks: saved.slice(), done: saved.length, bytes, current: 0, currentTotal: 0 });
+    for (let i = saved.length; i < tracks.length; i++) {
       if (downloads.get()[uid]?.status === 'cancelled') throw new Error('cancelled');
       const t = tracks[i];
-      const url = t.url || (t.resolve ? await t.resolve() : null);
+      let url = t.resolve ? await t.resolve() : t.url;
       if (!url) throw new Error(`No link for part ${i + 1}`);
       if (/^file:|^content:/.test(url)) {
         saved.push({ title: t.title, uri: url, duration: t.duration, offset: t.offset });
+        patch(uid, { done: i + 1, tracks: saved.slice() });
         continue;
       }
       const ext = ((EXT.exec(url) || [])[1] || (EXT.exec(t.title || '') || [])[1] || 'mp3').toLowerCase();
       const name = `${String(i + 1).padStart(3, '0')} - ${safe(t.title).slice(0, 60)}.${ext}`;
-      const r = await Native.download({ url, headers: t.headers || {}, name, folder, target, job, mime: MIME[ext] || 'audio/mpeg' });
+      let r;
+      try {
+        r = await Native.download({ url, headers: t.headers || {}, name, folder, target, job, mime: MIME[ext] || 'audio/mpeg' });
+      } catch (err) {
+        if (!t.resolve || !expiredLink(err) || downloads.get()[uid]?.status === 'cancelled') throw err;
+        // TorBox/Real-Debrid signed download links expire. Request a new one
+        // for this track only, then retry once (never loop indefinitely).
+        url = await t.resolve();
+        r = await Native.download({ url, headers: t.headers || {}, name, folder, target, job, mime: MIME[ext] || 'audio/mpeg' });
+      }
       bytes += r.size || 0;
       saved.push({ title: t.title, uri: r.uri, duration: t.duration, offset: t.offset, size: r.size });
       patch(uid, { done: i + 1, bytes, location: r.location, tracks: saved.slice(), current: 0, currentTotal: 0 });

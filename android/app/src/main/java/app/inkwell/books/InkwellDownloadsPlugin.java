@@ -42,6 +42,29 @@ public class InkwellDownloadsPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** Confirm an already downloaded part still exists before resuming. */
+    @PluginMethod
+    public void exists(PluginCall call) {
+        String value = call.getString("uri", "");
+        boolean exists = false;
+        try {
+            Uri uri = Uri.parse(value);
+            if ("content".equals(uri.getScheme())) {
+                try (android.os.ParcelFileDescriptor descriptor =
+                         getContext().getContentResolver().openFileDescriptor(uri, "r")) {
+                    exists = descriptor != null;
+                }
+            } else if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
+                exists = new File(uri.getPath()).isFile();
+            }
+        } catch (Exception ignored) {
+            exists = false;
+        }
+        JSObject result = new JSObject();
+        result.put("exists", exists);
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void cancel(PluginCall call) {
         String job = call.getString("job");
@@ -70,6 +93,7 @@ public class InkwellDownloadsPlugin extends Plugin {
                 if (cancelled.contains(job)) throw new InterruptedException("cancelled");
                 // Connect, following redirects across hosts (debrid CDNs do this).
                 String current = url;
+                boolean responseReady = false;
                 for (int i = 0; i < 8; i++) {
                     conn = (HttpURLConnection) new URL(current).openConnection();
                     conn.setInstanceFollowRedirects(false);
@@ -91,8 +115,10 @@ public class InkwellDownloadsPlugin extends Plugin {
                         continue;
                     }
                     if (code != 200) throw new Exception("Download failed (HTTP " + code + ")");
+                    responseReady = true;
                     break;
                 }
+                if (!responseReady) throw new Exception("Too many download redirects");
                 long total = conn.getContentLengthLong();
 
                 OutputStream out;
@@ -138,6 +164,10 @@ public class InkwellDownloadsPlugin extends Plugin {
                             notifyListeners("progress", p);
                         }
                     }
+                }
+                // A clean EOF is not proof of completion if the server promised more bytes.
+                if (total >= 0 && got != total) {
+                    throw new Exception("Download interrupted (" + got + "/" + total + " bytes)");
                 }
                 if (usePublic) {
                     ContentValues done = new ContentValues();

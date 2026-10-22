@@ -87,6 +87,8 @@ VITE_SUPABASE_ANON_KEY=<anon key>
 
 Leave them empty to use Audiohub without sync.
 
+**Android security:** account and provider credential-bearing stores are encrypted with Android Keystore (AES-256-GCM) in this fork. Existing WebView localStorage values are migrated on the first launch before the UI loads. Browser/PWA installations still use localStorage. Keep your Android signing key; deleting app data or uninstalling destroys device-bound secrets.
+
 **Security:** Supabase email confirmation must be enabled with functioning email delivery. New registrations must follow the verification link before signing in. Service credentials are **not synced by default on new installations**; existing installations may retain their previous setting. If you previously used an Audiohub sync project, re-run the updated in-app setup SQL to drop the legacy anonymous `audiohub_confirm` function. See [SECURITY.md](SECURITY.md) for migration steps.
 
 ### Optional: web relay (for the web version)

@@ -25,7 +25,11 @@ for (const [uid, d] of Object.entries(downloads.get())) {
 const expiredLink = (error) => /HTTP (?:401|403|404|410)\b/i.test(error?.message || '');
 
 async function savedPrefix(previous, tracks, folder, target) {
-  if (previous?.folder !== folder || previous?.target !== target) return [];
+  if (previous?.folder !== folder || previous?.target !== target) {
+    // Do not leave untracked files behind when destination or layout changes.
+    for (const old of previous?.tracks || []) await Native.remove({ uri: old.uri }).catch(() => {});
+    return [];
+  }
   const saved = previous?.tracks || [];
   const verified = [];
   for (let i = 0; i < saved.length && i < tracks.length; i++) {

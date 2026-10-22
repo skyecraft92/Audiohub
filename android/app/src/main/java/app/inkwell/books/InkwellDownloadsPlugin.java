@@ -42,6 +42,29 @@ public class InkwellDownloadsPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** Confirm an already downloaded part still exists before resuming. */
+    @PluginMethod
+    public void exists(PluginCall call) {
+        String value = call.getString("uri", "");
+        boolean exists = false;
+        try {
+            Uri uri = Uri.parse(value);
+            if ("content".equals(uri.getScheme())) {
+                try (android.os.ParcelFileDescriptor descriptor =
+                         getContext().getContentResolver().openFileDescriptor(uri, "r")) {
+                    exists = descriptor != null;
+                }
+            } else if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
+                exists = new File(uri.getPath()).isFile();
+            }
+        } catch (Exception ignored) {
+            exists = false;
+        }
+        JSObject result = new JSObject();
+        result.put("exists", exists);
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void cancel(PluginCall call) {
         String job = call.getString("job");
